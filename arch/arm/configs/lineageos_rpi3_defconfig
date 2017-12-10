@@ -1,6 +1,6 @@
 #
 # Automatically generated file; DO NOT EDIT.
-# Linux/arm 4.4.98 Kernel Configuration
+# Linux/arm 4.4.104 Kernel Configuration
 #
 CONFIG_ARM=y
 CONFIG_SYS_SUPPORTS_APM_EMULATION=y
@@ -3436,12 +3436,14 @@ CONFIG_ANDROID_BINDER_IPC_32BIT=y
 # FPGA Configuration Support
 #
 # CONFIG_FPGA is not set
+# CONFIG_TEE is not set
 
 #
 # Firmware Drivers
 #
 # CONFIG_FIRMWARE_MEMMAP is not set
 CONFIG_RASPBERRYPI_FIRMWARE=y
+CONFIG_HAVE_ARM_SMCCC=y
 
 #
 # File systems
