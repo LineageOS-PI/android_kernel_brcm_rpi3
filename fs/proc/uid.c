@@ -7,6 +7,7 @@
 #include <linux/hashtable.h>
 #include <linux/init.h>
 #include <linux/proc_fs.h>
+#include <linux/rtmutex.h>
 #include <linux/sched.h>
 #include <linux/seq_file.h>
 #include <linux/slab.h>
@@ -285,6 +286,8 @@ static const struct inode_operations proc_uid_inode_operations = {
 int __init proc_uid_init(void)
 {
 	proc_uid = proc_mkdir("uid", NULL);
+	if (!proc_uid)
+		return -ENOMEM;
 	proc_uid->proc_iops = &proc_uid_inode_operations;
 	proc_uid->proc_fops = &proc_uid_operations;
 
