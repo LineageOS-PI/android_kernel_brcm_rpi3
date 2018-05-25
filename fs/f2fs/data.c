@@ -19,8 +19,6 @@
 #include <linux/bio.h>
 #include <linux/prefetch.h>
 #include <linux/uio.h>
-#include <linux/mm.h>
-#include <linux/memcontrol.h>
 #include <linux/cleancache.h>
 
 #include "f2fs.h"
@@ -1735,6 +1733,7 @@ got_it:
 			goto out_writepage;
 
 		set_page_writeback(page);
+		ClearPageError(page);
 		f2fs_put_dnode(&dn);
 		if (fio->need_lock == LOCK_REQ)
 			f2fs_unlock_op(fio->sbi);
@@ -1757,6 +1756,7 @@ got_it:
 		goto out_writepage;
 
 	set_page_writeback(page);
+	ClearPageError(page);
 
 	/* LFS mode write path */
 	write_data_page(&dn, fio);
@@ -1902,7 +1902,13 @@ out:
 
 redirty_out:
 	redirty_page_for_writepage(wbc, page);
-	if (!err)
+	/*
+	 * pageout() in MM traslates EAGAIN, so calls handle_write_error()
+	 * -> mapping_set_error() -> set_bit(AS_EIO, ...).
+	 * file_write_and_wait_range() will see EIO error, which is critical
+	 * to return value of fsync() followed by atomic_write failure to user.
+	 */
+	if (!err || wbc->for_reclaim)
 		return AOP_WRITEPAGE_ACTIVATE;
 	unlock_page(page);
 	return err;
@@ -2511,37 +2517,6 @@ int f2fs_release_page(struct page *page, gfp_t wait)
 	return 1;
 }
 
-/*
- * This was copied from __set_page_dirty_buffers which gives higher performance
- * in very high speed storages. (e.g., pmem)
- */
-void f2fs_set_page_dirty_nobuffers(struct page *page)
-{
-	struct address_space *mapping = page->mapping;
-	struct mem_cgroup *memcg;
-	unsigned long flags;
-
-	if (unlikely(!mapping))
-		return;
-
-	spin_lock(&mapping->private_lock);
-	memcg = mem_cgroup_begin_page_stat(page);
-	SetPageDirty(page);
-	spin_unlock(&mapping->private_lock);
-
-	spin_lock_irqsave(&mapping->tree_lock, flags);
-	WARN_ON_ONCE(!PageUptodate(page));
-	account_page_dirtied(page, mapping, memcg);
-	radix_tree_tag_set(&mapping->page_tree,
-			page_index(page), PAGECACHE_TAG_DIRTY);
-	spin_unlock_irqrestore(&mapping->tree_lock, flags);
-
-	mem_cgroup_end_page_stat(memcg);
-
-	__mark_inode_dirty(mapping->host, I_DIRTY_PAGES);
-	return;
-}
-
 static int f2fs_set_data_page_dirty(struct page *page)
 {
 	struct address_space *mapping = page->mapping;
@@ -2565,7 +2540,7 @@ static int f2fs_set_data_page_dirty(struct page *page)
 	}
 
 	if (!PageDirty(page)) {
-		f2fs_set_page_dirty_nobuffers(page);
+		__set_page_dirty_nobuffers(page);
 		update_dirty_page(inode, page);
 		return 1;
 	}
